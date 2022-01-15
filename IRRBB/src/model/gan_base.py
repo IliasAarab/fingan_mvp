@@ -11,7 +11,7 @@ import tensorflow.keras as tfk
 
 # In-house modules
 # -----------------
-from .utils.parser import Parser
+from ..utils.parser import Parser
 
 
 class GANBase:
@@ -132,5 +132,4 @@ class GANBase:
             Pz, columns=[f"latent_dim_{i}" for i in range(1, self.dim_latent_space + 1)]
         )
         self.Pz = Pz
-
 

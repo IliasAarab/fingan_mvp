@@ -1,6 +1,7 @@
 """Wasserstein Generative Adversarial Model with Gradient Penalty to ensure 1-Lipschitz continuous Discriminator"""
 
 # Main libs
+from ctypes import Union
 import tensorflow as tf
 import tensorflow.keras as tfk
 import numpy as np
@@ -10,8 +11,10 @@ import pandas as pd
 from .gan_base import GANBase
 from ..utils.parser import Parser
 
+from loguru import logger
 
-class WGANGP(tfk.Model):
+
+class WGANGP(tfk.Model, GANBase):
 
     # Add to keras og init method
     def __init__(self, D, G, D_n=5, lambda_=10):
@@ -21,11 +24,12 @@ class WGANGP(tfk.Model):
         self.G = G
         self.D_n = D_n
         self.lambda_ = lambda_
+        self.init_base_class()
 
     # Add to keras og compile method
     def compile(self, D_optimizer, G_optimizer, D_loss, G_loss):
 
-        super.compile()
+        super().compile()
         self.D_optimizer = D_optimizer
         self.G_optimizer = G_optimizer
         self.D_loss = D_loss
@@ -66,17 +70,55 @@ class WGANGP(tfk.Model):
 
         return gp
 
-    
     # Override Tensorflow's train_step() method, this is the method that is being called for each batch when
-    # running .fit(). We are going to recreate this method to define the unique way GANs are trained
+    # running .fit(). We are going to recreate this method to define the unique way GANs are trained.
+    # The batch size is undertermined and can be set during when calling .fit()
     def train_step(self, Pr):
+        logger.debug(f"test: {Pr}")
+        if isinstance(Pr, tuple):
+            Pr = Pr[0]
+            logger.debug(f"test: {Pr}")
+        if isinstance(Pr, pd.DataFrame):
+            Pr = Pr.to_numpy()
 
         # Step 1: Train D until convergence / pre-determined number of steps
-        # TODO: create convergence option
-        for each_step in self.D_n:
-            
-            # Step 1.1: Create ml tuple (X, y)
-            # Step 1.1.1: Generate fake samples from Generator in current trained state
+        # -----------------------------------------------------------------------------------------------------------
+        for each_step in range(self.D_n):  # TODO: create convergence option
+            # Step 1.1:  Generate artificial samples from G in current trained state
+            Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False)
+            # Step 1.2: Forward propagate samples into D while taping the computations:
+            # We separately forward propagate Pr and Pg so that we can easily compute the 1st and 2nd term of the first part of Eq. 3
+            with tf.GradientTape() as g_tape:
+                D_pred_Pr = self.D(Pr, training=True)
+                D_pred_Pg = self.D(Pg, training=True)
+                D_loss = self.D_loss(D_pred_Pr, D_pred_Pg)
+                # Get GP
+                GP = self.get_GP(Pr, Pg)
+                # Compute Eq. 3
+                D_loss += self.lambda_ * GP
 
-            #self.D.fit(x= Pr, y= ytrain, epochs= 10)
+            # Step 1.3: Backpropagate into D: dD_w/dw -> gradient vector of D wrt to its weights
+            dD_dw = g_tape.gradient(D_loss, self.D.trainable_variables)
 
+            # Step 1.4: Update Ds weights
+            self.D_optimizer.apply_gradients(zip(dD_dw, self.D.trainable_variables))
+
+        # After convergence D should approximate the one Lipschtitz continous function within the Wasserstein Distance formulation
+
+        # Step 2: Train G for one interation based on Ds feedback
+        # ------------------------------------------------------------------------------------------------------------
+        with tf.GradientTape() as g_tape:
+            # Step 2.1: Generate artificial samples from G
+            Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False)
+            # Step 2.2: Forward propagate samples into D
+            D_pred_Pg = self.D(Pg, training=True)
+            # Step 2.3: Compute Gs loss TODO: unify D and G loss maybe
+            G_loss = self.G_loss(D_pred_Pr, D_pred_Pg)
+
+        # Step 2.4: Backpropagate loss through D all the way up to Gs weights -> dG_w/dw
+        dG_dw = g_tape.gradient(G_loss, self.G.trainable_variables)
+
+        # Step 2.5: Update Gs weights
+        self.G_optimizer.apply_gradients(zip(dG_dw, self.G.trainable_variables))
+
+        return {"d_loss": D_loss, "g_loss": G_loss}
