@@ -11,20 +11,26 @@ import pandas as pd
 from .gan_base import GANBase
 from ..utils.parser import Parser
 
-from loguru import logger
+# Set up logger
+from DataAnalyst.utils.logging import LoggerConfiguration
+
+log_config = LoggerConfiguration()
+log_config.set_logger(log_level="DEBUG", handler="STREAM")
+logger = log_config.logger
 
 
 class WGANGP(tfk.Model, GANBase):
 
     # Add to keras og init method
-    def __init__(self, D, G, D_n=5, lambda_=10):
-
+    def __init__(
+        self, Pr: pd.DataFrame, dim_latent_space: int = 128, D_n=5, lambda_=10
+    ):
+        logger.debug("Initialize tfk.Model")
         super().__init__()
-        self.D = D
-        self.G = G
+        GANBase.__init__(self, Pr)
         self.D_n = D_n
         self.lambda_ = lambda_
-        self.init_base_class()
+        logger.debug("Initialize WGANGP")
 
     # Add to keras og compile method
     def compile(self, D_optimizer, G_optimizer, D_loss, G_loss):
@@ -36,7 +42,7 @@ class WGANGP(tfk.Model, GANBase):
         self.G_loss = G_loss
 
     # Compute GP
-    def get_GP(self, Pr, Pg):
+    def _get_GP(self, Pr, Pg):
 
         ## Sidenote: Steps 1-5 are applied on _each_ interpolated sample but the computations have been vectorized for efficiency
         # this also mean that batchnormalization isn't allowed anymore within D, as this uses operations on the batch level whereas the GP
@@ -72,20 +78,26 @@ class WGANGP(tfk.Model, GANBase):
 
     # Override Tensorflow's train_step() method, this is the method that is being called for each batch when
     # running .fit(). We are going to recreate this method to define the unique way GANs are trained.
-    # The batch size is undertermined and can be set during when calling .fit()
+    # The batch size is undertermined and can be set when calling .fit()
     def train_step(self, Pr):
-        logger.debug(f"test: {Pr}")
+
+        logger.debug(f" type of Pr is: {type(Pr)}")
         if isinstance(Pr, tuple):
             Pr = Pr[0]
-            logger.debug(f"test: {Pr}")
-        if isinstance(Pr, pd.DataFrame):
-            Pr = Pr.to_numpy()
+
+        if isinstance(
+            Pr, pd.DataFrame
+        ):  # TODO: conversion must happen much earlier -> create getter for Pr ?
+            logger.debug("Converting Pr to numpy ndarray")
+            Pr = Pr.to_numpy().astype("float32")
+
+        logger.debug(f"type of Pr after if statements is: {type(Pr)}")
 
         # Step 1: Train D until convergence / pre-determined number of steps
         # -----------------------------------------------------------------------------------------------------------
         for each_step in range(self.D_n):  # TODO: create convergence option
             # Step 1.1:  Generate artificial samples from G in current trained state
-            Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False)
+            Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False, to_numpy=False)
             # Step 1.2: Forward propagate samples into D while taping the computations:
             # We separately forward propagate Pr and Pg so that we can easily compute the 1st and 2nd term of the first part of Eq. 3
             with tf.GradientTape() as g_tape:
@@ -93,7 +105,7 @@ class WGANGP(tfk.Model, GANBase):
                 D_pred_Pg = self.D(Pg, training=True)
                 D_loss = self.D_loss(D_pred_Pr, D_pred_Pg)
                 # Get GP
-                GP = self.get_GP(Pr, Pg)
+                GP = self._get_GP(Pr, Pg)
                 # Compute Eq. 3
                 D_loss += self.lambda_ * GP
 
@@ -109,11 +121,11 @@ class WGANGP(tfk.Model, GANBase):
         # ------------------------------------------------------------------------------------------------------------
         with tf.GradientTape() as g_tape:
             # Step 2.1: Generate artificial samples from G
-            Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False)
+            Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False, to_numpy=False)
             # Step 2.2: Forward propagate samples into D
             D_pred_Pg = self.D(Pg, training=True)
             # Step 2.3: Compute Gs loss TODO: unify D and G loss maybe
-            G_loss = self.G_loss(D_pred_Pr, D_pred_Pg)
+            G_loss = self.G_loss(D_pred_Pg)
 
         # Step 2.4: Backpropagate loss through D all the way up to Gs weights -> dG_w/dw
         dG_dw = g_tape.gradient(G_loss, self.G.trainable_variables)
