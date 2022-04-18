@@ -30,4 +30,4 @@ setup(
         "License :: OSI Approved :: MIT License",
     ],
     package_dir={"":"FinGAN"},
-    packages=find_packages(where= "FinGAN") )
+    packages=find_packages() )
