@@ -1,6 +1,7 @@
 **/.ipynb_checkpoints/*
 **/__pycache__
 **/.vscode
-.vscode
-**/.info
+*.vscode
+*.egg-info
+*__pycache__
 #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I
