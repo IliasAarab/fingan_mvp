@@ -19,7 +19,7 @@ from .parser import Parser
 # Plotly configs
 # ----------------
 pio.renderers.default = "notebook+pdf+vscode+jupyterlab"
-pio.templates.default = "ggplot2"
+pio.templates.default = "plotly_white+presentation"
 GGPLOT_COLORWAY = ["#F8766D", "#A3A500", "#00BF7D", "#00B0F6", "#E76BF3"]
 GGPLOT_COLORWAY2 = [
     "#999999",
@@ -128,7 +128,7 @@ class GANvis:
                 x=xgrid,
                 y=ygrid,
                 z=y_pred,
-                colorscale=[[0, "#154a21"], [1, "#8a0000"]],
+                #colorscale=[[0, "#154a21"], [1, "#8a0000"]],
                 contours_coloring="heatmap",
                 colorbar=dict(
                     title=None,  # r"Probability of real sample",
