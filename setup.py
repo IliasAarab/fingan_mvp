@@ -29,5 +29,5 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "License :: OSI Approved :: MIT License",
     ],
-    package_dir={"":"IRRBB/src"},
-    packages=find_packages(where= "IRRBB/src") )
+    package_dir={"":"IRRBB"},
+    packages=find_packages(where= "src") )
