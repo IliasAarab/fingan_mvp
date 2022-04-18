@@ -29,5 +29,5 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "License :: OSI Approved :: MIT License",
     ],
-    package_dir={"":"FinGAN"},
+    #package_dir={"":"FinGAN"},
     packages=find_packages() )
