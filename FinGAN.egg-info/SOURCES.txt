@@ -1,5 +1,0 @@
-setup.py
-FinGAN.egg-info/PKG-INFO
-FinGAN.egg-info/SOURCES.txt
-FinGAN.egg-info/dependency_links.txt
-FinGAN.egg-info/top_level.txt
