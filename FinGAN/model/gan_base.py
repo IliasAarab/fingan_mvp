@@ -11,7 +11,7 @@ import tensorflow.keras as tfk
 
 # In-house modules
 # -----------------
-from ..utils.parser import Parser
+from ..utils.parse import Parse
 
 # Set up logger
 from DataAnalyst.utils.logging import LoggerConfiguration
@@ -29,7 +29,9 @@ logger = log_config.logger
 
 class GANBase:
     def __init__(
-        self, Pr: pd.DataFrame, dim_latent_space: int = 128,
+        self,
+        Pr: pd.DataFrame,
+        dim_latent_space: int = 128,
     ):
         logger.debug("Initialize GANBase class")
         # Discriminator, Generator
@@ -44,7 +46,8 @@ class GANBase:
         self.n, self.v = Pr.shape
 
     def init_discriminator(
-        self, output_activation=tfk.activations.linear,
+        self,
+        output_activation=tfk.activations.linear,
     ):
 
         # MVP with hardcoded components
@@ -64,14 +67,17 @@ class GANBase:
         )(dag)
         # Output layer
         dag_output = tfk.layers.Dense(
-            units=1, activation=output_activation, name="output_layer",
+            units=1,
+            activation=output_activation,
+            name="output_layer",
         )(dag)
 
         # Construct model from DAG
         self.D = tfk.Model(inputs=dag_input, outputs=dag_output, name="Discriminator")
 
     def init_generator(
-        self, output_activation=tfk.activations.tanh,
+        self,
+        output_activation=tfk.activations.tanh,
     ):
         # MVP with hardcoded components
         # using TFs functional API to create a Directed Acylic Graph (DAG)
@@ -128,7 +134,10 @@ class GANBase:
         # Convert to dataframe
         if as_df and not isinstance(data, pd.DataFrame):
             cols = self.feature_names
-            data = pd.DataFrame(data, columns=cols,)
+            data = pd.DataFrame(
+                data,
+                columns=cols,
+            )
 
         return data
 
@@ -154,4 +163,3 @@ class GANBase:
         #     )
 
         return Pz
-
