@@ -8,11 +8,6 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras as tfk
 
-
-# In-house modules
-# -----------------
-from ..utils.parse import Parse
-
 # Set up logger
 from DataAnalyst.utils.logging import LoggerConfiguration
 
