@@ -19,6 +19,7 @@ log_config.set_logger(log_level="DEBUG", handler="STREAM")
 logger = log_config.logger
 
 
+
 class WGANGP(tfk.Model, GANBase):
 
     # Add to keras og init method
@@ -81,7 +82,6 @@ class WGANGP(tfk.Model, GANBase):
     # The batch size is undertermined and can be set when calling .fit()
     def train_step(self, Pr):
 
-        logger.debug(f" type of Pr is: {type(Pr)}")
         if isinstance(Pr, tuple):
             Pr = Pr[0]
 
@@ -91,11 +91,10 @@ class WGANGP(tfk.Model, GANBase):
             logger.debug("Converting Pr to numpy ndarray")
             Pr = Pr.to_numpy().astype("float32")
 
-        logger.debug(f"type of Pr after if statements is: {type(Pr)}")
 
         # Step 1: Train D until convergence / pre-determined number of steps
         # -----------------------------------------------------------------------------------------------------------
-        for each_step in range(self.D_n):  # TODO: create convergence option
+        for _ in range(self.D_n):  # TODO: create convergence option
             # Step 1.1:  Generate artificial samples from G in current trained state
             Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False, to_numpy=False)
             # Step 1.2: Forward propagate samples into D while taping the computations:
@@ -115,7 +114,7 @@ class WGANGP(tfk.Model, GANBase):
             # Step 1.4: Update Ds weights
             self.D_optimizer.apply_gradients(zip(dD_dw, self.D.trainable_variables))
 
-        # After convergence D should approximate the one Lipschtitz continous function within the Wasserstein Distance formulation
+        # After convergence D should approximate the one Lipschitz continous function within the Wasserstein Distance formulation
 
         # Step 2: Train G for one interation based on Ds feedback
         # ------------------------------------------------------------------------------------------------------------
