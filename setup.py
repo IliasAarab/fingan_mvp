@@ -12,11 +12,11 @@ here = os.path.abspath(os.path.dirname(__file__))
 #     long_description = "\n" + fh.read()
 
 VERSION = "0.0.1"
-DESCRIPTION = "StressGAN"
+DESCRIPTION = "FinGAN"
 
 
 setup(
-    name="StressGAN",
+    name="FinGAN",
     version=VERSION,
     author="Ilias Aarab",
     author_email="ilias_aarab@hotmail.com",
@@ -29,5 +29,5 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "License :: OSI Approved :: MIT License",
     ],
-    package_dir={"":"IRRBB"},
-    packages=find_packages(where= "src") )
+    package_dir={"":"FinGAN"},
+    packages=find_packages(where= "FinGAN") )

@@ -1,5 +1,0 @@
-setup.py
-IRRBB/StressGAN.egg-info/PKG-INFO
-IRRBB/StressGAN.egg-info/SOURCES.txt
-IRRBB/StressGAN.egg-info/dependency_links.txt
-IRRBB/StressGAN.egg-info/top_level.txt

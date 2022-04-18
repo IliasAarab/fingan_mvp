@@ -1,7 +1,7 @@
 Metadata-Version: 2.1
-Name: StressGAN
+Name: FinGAN
 Version: 0.0.1
-Summary: StressGAN
+Summary: FinGAN
 Author: Ilias Aarab
 Author-email: ilias_aarab@hotmail.com
 License: UNKNOWN
@@ -12,5 +12,5 @@ Classifier: License :: OSI Approved :: MIT License
 Requires-Python: >=3.7, <3.10
 Description-Content-Type: text/markdown
 
-StressGAN
+FinGAN
 

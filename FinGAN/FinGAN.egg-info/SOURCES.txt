@@ -1,0 +1,13 @@
+setup.py
+FinGAN/FinGAN.egg-info/PKG-INFO
+FinGAN/FinGAN.egg-info/SOURCES.txt
+FinGAN/FinGAN.egg-info/dependency_links.txt
+FinGAN/FinGAN.egg-info/top_level.txt
+FinGAN/model/__init__.py
+FinGAN/model/gan_base.py
+FinGAN/model/wgan_gp.py
+FinGAN/utils/__init__.py
+FinGAN/utils/nnvis.py
+FinGAN/utils/parser.py
+FinGAN/utils/preprocessing.py
+FinGAN/utils/toydata_generator.py
