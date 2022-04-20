@@ -1,7 +1,7 @@
 """Wasserstein Generative Adversarial Model with Gradient Penalty to ensure 1-Lipschitz continuous Discriminator"""
 
 # Main libs
-from ctypes import Union
+from typing import Callable
 import tensorflow as tf
 import tensorflow.keras as tfk
 import numpy as np
@@ -19,33 +19,59 @@ log_config.set_logger(log_level="DEBUG", handler="STREAM")
 logger = log_config.logger
 
 
-
 class WGANGP(tfk.Model, GANBase):
 
     # Add to keras og init method
     def __init__(
-        self, Pr: pd.DataFrame, dim_latent_space: int = 128, D_n=5, lambda_=10
+        self,
+        Pr: pd.DataFrame,
+        dim_latent_space: int = 128,
+        D_n: int = 5,
+        lambda_: float = 10.0,
     ):
         logger.debug("Initialize tfk.Model")
         super().__init__()
-        GANBase.__init__(self, Pr)
+        GANBase.__init__(self, Pr, dim_latent_space)
         self.D_n = D_n
         self.lambda_ = lambda_
+        self.G_optimizer = tfk.optimizers.Adam(
+            learning_rate=0.0002, beta_1=0.5, beta_2=0.9
+        )
+        self.D_optimizer = tfk.optimizers.Adam(
+            learning_rate=0.0002, beta_1=0.5, beta_2=0.9
+        )
+        self.G_loss = lambda D_Pg: -tf.reduce_mean(D_Pg)
+        self.D_loss = lambda D_Pr, D_Pg: tf.reduce_mean(D_Pg) - tf.reduce_mean(D_Pr)
         logger.debug("Initialize WGANGP")
 
     # Add to keras og compile method
-    def compile(self, D_optimizer, G_optimizer, D_loss, G_loss):
+    def compile(
+        self,
+        D_optimizer: Callable = None,
+        G_optimizer: Callable = None,
+        D_loss: Callable = None,
+        G_loss: Callable = None,
+    ) -> None:
 
         super().compile()
-        self.D_optimizer = D_optimizer
-        self.G_optimizer = G_optimizer
-        self.D_loss = D_loss
-        self.G_loss = G_loss
+        if D_optimizer is not None:
+            self.D_optimizer = D_optimizer
+        if G_optimizer is not None:
+            self.G_optimizer = G_optimizer
+        if D_loss is not None:
+            self.D_loss = D_loss
+        if G_loss is not None:
+            self.G_loss = G_loss
 
     # Compute GP
     def _get_GP(self, Pr, Pg):
 
-        ## Sidenote: Steps 1-5 are applied on _each_ interpolated sample but the computations have been vectorized for efficiency
+        if self.D is None or self.G is None:
+            raise AttributeError(
+                "Make sure to initialize both Discriminator and Generator"
+            )
+
+        ## Sidenote: Steps 1-5 are applied on *each* interpolated sample but the computations have been vectorized for efficiency
         # this also mean that batchnormalization isn't allowed anymore within D, as this uses operations on the batch level whereas the GP
         # is computed on the individual sample level. Batchnorm variations can possibly be added if they do not introduce correlations between
         # individual samples.
@@ -53,7 +79,7 @@ class WGANGP(tfk.Model, GANBase):
         # Step 1: Get interpolated sample between Pr and Pg (`x_hat` of Eq.3)
         # x_hat= u*Pr + (1-u)*Pg with u~U(0,1)
         u = tf.random.uniform(shape=(Pr.shape[0], 1), minval=0, maxval=1)
-        Prg = u * Pr + (1 - u) * Pg
+        Prg = u * Pg + (1 - u) * Pr
 
         # Step 2: Compute Ds output based on the interpolated batch (while taping the computations)
         with tf.GradientTape() as g_tape:
@@ -65,7 +91,7 @@ class WGANGP(tfk.Model, GANBase):
                 Prg, training=True
             )  # equivalent but faster than D.predict(Prg) unless multiple batches are used
 
-        # Step 3: Compute the gradients of Ds weights with respect to the interpolated batch
+        # Step 3: Compute the gradients of D with respect to the interpolated batch
         # so D_pred_Prg = D(Prg) and we need dD(Prg)/dPrg
         dD_dPrg = g_tape.gradient(D_pred_Prg, Prg)
 
@@ -82,6 +108,11 @@ class WGANGP(tfk.Model, GANBase):
     # The batch size is undertermined and can be set when calling .fit()
     def train_step(self, Pr):
 
+        if self.D is None or self.G is None:
+            raise AttributeError(
+                "Make sure to initialize both Discriminator and Generator"
+            )
+
         if isinstance(Pr, tuple):
             Pr = Pr[0]
 
@@ -91,9 +122,7 @@ class WGANGP(tfk.Model, GANBase):
             logger.debug("Converting Pr to numpy ndarray")
             Pr = Pr.to_numpy().astype("float32")
 
-
         # Step 1: Train D until convergence / pre-determined number of steps
-        # -----------------------------------------------------------------------------------------------------------
         for _ in range(self.D_n):  # TODO: create convergence option
             # Step 1.1:  Generate artificial samples from G in current trained state
             Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False, to_numpy=False)
@@ -117,13 +146,12 @@ class WGANGP(tfk.Model, GANBase):
         # After convergence D should approximate the one Lipschitz continous function within the Wasserstein Distance formulation
 
         # Step 2: Train G for one interation based on Ds feedback
-        # ------------------------------------------------------------------------------------------------------------
         with tf.GradientTape() as g_tape:
             # Step 2.1: Generate artificial samples from G
             Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False, to_numpy=False)
             # Step 2.2: Forward propagate samples into D
             D_pred_Pg = self.D(Pg, training=True)
-            # Step 2.3: Compute Gs loss TODO: unify D and G loss maybe
+            # Step 2.3: Compute Gs loss 
             G_loss = self.G_loss(D_pred_Pg)
 
         # Step 2.4: Backpropagate loss through D all the way up to Gs weights -> dG_w/dw
