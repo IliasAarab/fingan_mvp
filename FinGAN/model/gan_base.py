@@ -3,6 +3,7 @@
 
 ## Main libs
 # ------------------
+from typing import Callable
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -17,7 +18,7 @@ logger = log_config.logger
 
 # What is the problem? two problems actually:
 # 1. we need to be able to make flexible Gs and Ds
-# 2. we need to be ablt to have a generic set of methods and attributes
+# 2. we need to be able to have a generic set of methods and attributes
 
 # 1. We can make a function that adapts a subclassed layer, but this would still be within a base class
 
@@ -39,11 +40,20 @@ class GANBase:
         # Metaschema of dataset
         self.feature_names = Pr.columns
         self.n, self.v = Pr.shape
+    
+    def add_discriminator(self, D: tfk.Model) -> None:
+
+        self.D = D
+
+    def add_generator(self, G: tfk.Model) -> None:
+
+        self.G = G
+
 
     def init_discriminator(
         self,
-        output_activation=tfk.activations.linear,
-    ):
+        output_activation: Callable = tfk.activations.linear,
+    ) -> tfk.Model:
 
         # MVP with hardcoded components
         # using TFs functional API to create a Directed Acylic Graph (DAG)
@@ -52,13 +62,10 @@ class GANBase:
         dag_input = tfk.Input(shape=(self.v,), name="input_layer")
         # Hidden layers
         dag = tfk.layers.Dense(
-            units=64, activation=tfk.layers.LeakyReLU(), name="hidden_layer_1"
+            units=self.v * 2, activation=tfk.layers.LeakyReLU(), name="hidden_layer_1"
         )(dag_input)
         dag = tfk.layers.Dense(
-            units=32, activation=tfk.layers.LeakyReLU(), name="hidden_layer_2"
-        )(dag)
-        dag = tfk.layers.Dense(
-            units=16, activation=tfk.layers.LeakyReLU(), name="hidden_layer_3"
+            units=self.v, activation=tfk.layers.LeakyReLU(), name="hidden_layer_2"
         )(dag)
         # Output layer
         dag_output = tfk.layers.Dense(
@@ -72,23 +79,22 @@ class GANBase:
 
     def init_generator(
         self,
-        output_activation=tfk.activations.tanh,
-    ):
-        # MVP with hardcoded components
-        # using TFs functional API to create a Directed Acylic Graph (DAG)
+        output_activation: Callable = tfk.activations.tanh,
+    ) -> tfk.Model:
+        """MVP with hardcoded components: using TFs functional API to create a Directed Acylic Graph (DAG)"""
 
         # Inputlayer
         dag_input = tfk.Input(shape=(self.dim_latent_space,), name="input_layer")
+        dag = tfk.layers.BatchNormalization()(dag_input)
+
         # Hidden layers
         dag = tfk.layers.Dense(
-            units=64, activation=tfk.layers.LeakyReLU(), name="hidden_layer_1"
-        )(dag_input)
-        dag = tfk.layers.Dense(
-            units=32, activation=tfk.layers.LeakyReLU(), name="hidden_layer_2"
+            units=self.dim_latent_space * 2,
+            activation=tfk.layers.LeakyReLU(),
+            name="hidden_layer_1",
         )(dag)
-        dag = tfk.layers.Dense(
-            units=16, activation=tfk.layers.LeakyReLU(), name="hidden_layer_3"
-        )(dag)
+        dag = tfk.layers.BatchNormalization()(dag_input)
+
         # Output layer
         dag_output = tfk.layers.Dense(
             units=self.v, activation=output_activation, name="output_layer"
@@ -98,7 +104,7 @@ class GANBase:
         self.G = tfk.Model(inputs=dag_input, outputs=dag_output, name="Generator")
 
     def generate_data(
-        self, distribution: str, n=100, as_df=True, to_numpy=True
+        self, distribution: str, n: int = 100, as_df: bool = True, to_numpy: bool = True
     ) -> None:
 
         # Either Pr or Pg
@@ -110,9 +116,9 @@ class GANBase:
             if self.__Pz_distribution is None:
                 self.init_latent_space(distribution="Gaussian")
             Pz = self.draw_Pz(n=n)
-            if to_numpy:
+            if to_numpy and self.G is not None:
                 data = self.G(Pz).numpy()
-            else:
+            elif self.G is not None:
                 data = self.G(Pz)
             y = np.zeros((n, 1))
 
