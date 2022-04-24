@@ -27,6 +27,11 @@ class dataGenerator:
             scale = kwargs["scale"] if "scale" in kwargs.keys() else 1
             df = np.random.multivariate_normal(loc, scale, size=nsamples)
 
+        if distribution.lower() in ["lognormal"]:
+            loc = kwargs["loc"] if "loc" in kwargs.keys() else 0
+            scale = kwargs["scale"] if "scale" in kwargs.keys() else 1
+            df = np.random.lognormal(loc, scale, size=(nsamples, ndim))
+
         # Reformat data
         df = pd.DataFrame(df, columns=[f"feature_{i}" for i in range(1, ndim + 1)])
 
