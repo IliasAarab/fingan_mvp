@@ -3,51 +3,133 @@
 
 # Main libs
 # ---------------
-from typing import Union
+from typing import Callable, Union
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.figure_factory as ff
 import plotly.io as pio
+import matplotlib.pyplot as plt
+import tensorflow.keras as tfk
+import seaborn as sns
+from met_brewer.palettes import met_brew
+from IPython.display import clear_output, display
+
+
+
+
+
 
 # In-house libs
 # -------------
 from .parser import Parser
+from ..model.gan_base import GANBase
 
 
 # Plotly configs
 # ----------------
+colors= met_brew(name="Juarez", brew_type="discrete")
 pio.renderers.default = "notebook+pdf+vscode+jupyterlab"
-pio.templates.default = "plotly_white+presentation"
-GGPLOT_COLORWAY = ["#F8766D", "#A3A500", "#00BF7D", "#00B0F6", "#E76BF3"]
-GGPLOT_COLORWAY2 = [
-    "#999999",
-    "#E69F00",
-    "#56B4E9",
-    "#009E73",
-    "#F0E442",
-    "#0072B2",
-    "#D55E00",
-    "#CC79A7",
-]
-
+pio.templates["metbrewer"] = go.layout.Template(
+    layout=go.Layout(colorway=colors)
+)
+pio.templates.default = "plotly_white+presentation+metbrewer"
+sns.set_palette(colors)
 
 class GANvis:
     """Visualisation class for Generative Adverserial Models"""
 
     config = {"staticPlot": True}
-    GGPLOT_COLORWAY = ["#F8766D", "#A3A500", "#00BF7D", "#00B0F6", "#E76BF3"]
-    GGPLOT_COLORWAY2 = [
-        "#999999",
-        "#E69F00",
-        "#56B4E9",
-        "#009E73",
-        "#F0E442",
-        "#0072B2",
-        "#D55E00",
-        "#CC79A7",
-    ]
+
+    @staticmethod
+    def plot():
+        x = []
+        y = []
+        fig, ax = plt.subplots(2,2)
+        ax[0,0].set_xlim(0,1)
+        ax[0,0].set_ylim(0,1)
+        ax[0,1].set_xlim(0,1)
+        ax[0,1].set_ylim(0,1)
+        
+        x.append(np.random.rand())
+        y.append(np.random.rand())
+        ax[0,1].cla()
+        ax[0,0].scatter(x,y)
+        ax[0,1].scatter(np.random.rand(100),np.random.rand(100))
+        display(plt.gcf())
+        clear_output(wait=True)
+
+    @staticmethod
+    def plot_snapshot(GAN: GANBase, step: int, theoretical_mapping: Callable=None, resolution: int= 100) -> plt.Axes:
+
+
+        # Plot 4 graphs yielding information on the training progress
+        fig, ax = plt.subplots(2, 2, figsize=[10, 10])
+        fig.suptitle(f"\n       {step:05d}", fontsize=10)
+
+        # Plot 1: loss and accuracy graphs
+        pass
+
+        # Plot 2: empirical vs. generated distribution
+        Pr = GAN.generate_data(distribution="Pr", n=1000)
+        Pg = GAN.generate_data(distribution="Pg", n=1000)
+        df = Parser.to_one_df(data=[Pr, Pg])
+        ax[0,1].cla()
+        if Pr.shape[1] == 1:
+            
+            sns.kdeplot(
+                data=df,
+                x=df.iloc[:, 0],
+                hue="Dataset",
+                alpha=0.75,
+                ax=ax[0, 1],
+                shade=True,
+            )
+        if Pr.shape[1] == 2:
+            sns.scatterplot(
+                data=df,
+                x=df.iloc[:, 0],
+                y= df.iloc[:, 1],
+                hue="Dataset",
+                style="Dataset",
+                alpha=0.75,
+                ax=ax[0, 1],
+            )
+        if Pr.shape[1] > 2: #TODO: map to latent space
+            sns.scatterplot(
+                data=df,
+                x=df.iloc[:, 0],
+                y= df.iloc[:, 1],
+                hue="Dataset",
+                style="Dataset",
+                alpha=0.75,
+                ax=ax[0, 1],
+            )
+
+        # Plot 3: mapping f: Z -> X vs. G: Z -> X
+        # TODO: multidimension representation for both input/output
+        # Gaussian
+        if GAN.Pz_distribution.lower() in ["gaussian", "normal"]:
+            latent_grid = np.linspace(-3, 3, resolution*GAN.dim_latent_space).reshape(-1, GAN.dim_latent_space)
+        # Uniform
+        elif GAN.Pz_distribution.lower() in ["uniform", "rand"]:
+            latent_grid = np.linspace(-1, 1, resolution*GAN.dim_latent_space).reshape(-1, GAN.dim_latent_space)
+        
+        y_pred = GAN.G.predict(latent_grid)
+        ax[1,0].cla()
+        ax[1,0].plot(latent_grid, y_pred, label= "Generator mapping")
+        if theoretical_mapping is not None:
+            y_true = theoretical_mapping(latent_grid)
+            ax[1,0].plot(latent_grid, y_true, label= "Theoretical mapping")
+
+        
+
+        # Plot 4: Ds behavior for a specific dimension
+        pass
+
+        display(plt.gcf())
+        clear_output(wait=True)
 
     @staticmethod
     def plot_decision_boundary(
@@ -128,7 +210,7 @@ class GANvis:
                 x=xgrid,
                 y=ygrid,
                 z=y_pred,
-                #colorscale=[[0, "#154a21"], [1, "#8a0000"]],
+                colorscale=[[0, colors[0]], [1, colors[1]]],
                 contours_coloring="heatmap",
                 colorbar=dict(
                     title=None,  # r"Probability of real sample",
