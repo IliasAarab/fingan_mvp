@@ -8,10 +8,7 @@ import numpy as np
 
 # Typehinting
 # -----------
-from typing import Union
-
-from pandas.core.algorithms import isin
-from pandas.core.frame import DataFrame
+from typing import Tuple, Union
 
 
 class Parser:
@@ -30,8 +27,8 @@ class Parser:
 
     @staticmethod
     def to_two_dfs(
-        data: Union[pd.DataFrame, "tuple[np.ndarray, np.ndarray]"], **kwargs
-    ) -> "tuple[pd.DataFrame, pd.DataFrame]":
+        data: Union[pd.DataFrame, Tuple[np.ndarray, np.ndarray]], **kwargs
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """A GANs discriminator/critic ingests/outputs the dataset pair (X,y) consists of:
         - df: dataframe.
         - X: matrix with Xjk the kth attribute of the jth sample (real or generated)
@@ -53,8 +50,8 @@ class Parser:
 
     @staticmethod
     def to_ml_tuple(
-        data: Union[pd.DataFrame, "tuple[pd.DataFrame, pd.DataFrame]"]
-    ) -> "tuple[np.ndarray, np.ndarray]":
+        data: Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame]]
+    ) -> Tuple[np.ndarray, np.ndarray]:
 
         if isinstance(data, tuple):
             df = Parser._from_two_dfs_to_one_df(data)
@@ -66,9 +63,7 @@ class Parser:
 
     @staticmethod
     def to_one_df(
-        data: Union[
-            "tuple[pd.DataFrame, pd.DataFrame]", "tuple[np.ndarray, np.ndarray]"
-        ],
+        data: Union[Tuple[pd.DataFrame, pd.DataFrame], Tuple[np.ndarray, np.ndarray]],
         **kwargs,
     ) -> pd.DataFrame:
 
@@ -82,7 +77,7 @@ class Parser:
 
     @staticmethod
     def _from_two_dfs_to_one_df(
-        data: "tuple[pd.DataFrame, pd.DataFrame]",
+        data: Tuple[pd.DataFrame, pd.DataFrame],
     ) -> pd.DataFrame:
         # TODO: we assume first element of tuple is Pr and 2nd is Pg
         Pr, Pg = data
@@ -94,10 +89,10 @@ class Parser:
 
     @staticmethod
     def _from_ml_tuple_to_two_dfs(
-        data: "tuple[np.ndarray, np.ndarray]",
+        data: Tuple[np.ndarray, np.ndarray],
         hard_classes: bool = True,
         feature_names: "list[str]" = None,
-    ) -> "tuple[pd.DataFrame, pd.DataFrame]":
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         X, y = data  # assume first elm is X and 2nd is y
         # convert row vector into col vector for univariate datasets
         X = Parser._atleast2D(X)
@@ -123,7 +118,7 @@ class Parser:
         return (Pr, Pg)
 
     @staticmethod
-    def _from_one_df_to_ml_tuple(data: pd.DataFrame) -> "tuple[np.ndarray, np.ndarray]":
+    def _from_one_df_to_ml_tuple(data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
 
         data = data.copy().to_numpy()
         X, y = data[:, :-1], data[:, -1]
@@ -134,10 +129,8 @@ class Parser:
 
     @staticmethod
     def _enforce_array_same_len(
-        data: Union[
-            "tuple[pd.DataFrame, pd.DataFrame]", "tuple[np.ndarray, np.ndarray]"
-        ]
-    ) -> Union["tuple[pd.DataFrame, pd.DataFrame]", "tuple[np.ndarray, np.ndarray]"]:
+        data: Union[Tuple[pd.DataFrame, pd.DataFrame], Tuple[np.ndarray, np.ndarray]]
+    ) -> Union[Tuple[pd.DataFrame, pd.DataFrame], Tuple[np.ndarray, np.ndarray]]:
 
         Pr, Pg = data
         if isinstance(Pr, pd.DataFrame):
