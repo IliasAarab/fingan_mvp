@@ -1,15 +1,21 @@
 """Wasserstein Generative Adversarial Model with Gradient Penalty to ensure 1-Lipschitz continuous Discriminator"""
 
 # Main libs
-from typing import Callable
+from typing import Callable, Dict
 import tensorflow as tf
 import tensorflow.keras as tfk
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from IPython.display import clear_output
+import seaborn as sns
+
 
 # In-house modules
 from .gan_base import GANBase
+from .gan_base import GANmonitoring
 from ..utils.parser import Parser
+
 
 # Set up logger
 from DataAnalyst.utils.logging import LoggerConfiguration
@@ -40,8 +46,10 @@ class WGANGP(tfk.Model, GANBase):
         self.D_optimizer = tfk.optimizers.Adam(
             learning_rate=0.0002, beta_1=0.5, beta_2=0.9
         )
-        self.G_loss = lambda D_Pg: -tf.reduce_mean(D_Pg)
-        self.D_loss = lambda D_Pr, D_Pg: tf.reduce_mean(D_Pg) - tf.reduce_mean(D_Pr)
+        self.G_loss = lambda D_Pg: -tf.reduce_mean(D_Pg)  # G tries to maximize D_Pg
+        self.D_loss = lambda D_Pr, D_Pg: tf.reduce_mean(D_Pg) - tf.reduce_mean(
+            D_Pr
+        )  # D tries to minimize D_Pr and maximize D_Pr
         logger.debug("Initialize WGANGP")
 
     # Add to keras og compile method
@@ -151,7 +159,7 @@ class WGANGP(tfk.Model, GANBase):
             Pg = self.generate_data("Pg", n=Pr.shape[0], as_df=False, to_numpy=False)
             # Step 2.2: Forward propagate samples into D
             D_pred_Pg = self.D(Pg, training=True)
-            # Step 2.3: Compute Gs loss 
+            # Step 2.3: Compute Gs loss
             G_loss = self.G_loss(D_pred_Pg)
 
         # Step 2.4: Backpropagate loss through D all the way up to Gs weights -> dG_w/dw
@@ -160,4 +168,160 @@ class WGANGP(tfk.Model, GANBase):
         # Step 2.5: Update Gs weights
         self.G_optimizer.apply_gradients(zip(dG_dw, self.G.trainable_variables))
 
-        return {"d_loss": D_loss, "g_loss": G_loss}
+        # Losses
+        D_pred_Pr, D_pred_Pg = self.D(Pr), self.D(Pg)
+        current_losses = {}
+        current_losses["Wasserstein distance"] = np.abs(
+            self.D_loss(D_pred_Pr, D_pred_Pg)
+        )
+        current_losses["D_loss_Pr"] = tf.reduce_mean(D_pred_Pr)
+        current_losses["D_loss_Pg"] = tf.reduce_mean(D_pred_Pg)
+        current_losses["Gradient penalty"] = self._get_GP(Pr, Pg)
+        return current_losses
+
+
+class WGANGPmonitoring(GANmonitoring):
+    def __init__(self, theoretical_mapping: Callable = None, plot_step=100):
+        super().__init__(theoretical_mapping=theoretical_mapping, plot_step=plot_step)
+
+    def on_train_begin(self, logs: Dict = None):
+
+        # Create dictionary to store losses
+        self.losses = {}
+        self.losses["Wasserstein distance"] = []
+        self.losses["D_loss_Pr"] = []
+        self.losses["D_loss_Pg"] = []
+        self.losses["Gradient penalty"] = []
+
+    def on_epoch_end(
+        self,
+        epoch,
+        logs: Dict = None,
+    ):
+
+        # Update losses
+        for k, v in logs.items():
+            self.losses[k].append(v)
+
+        # Plot current progress (on JN)
+        if (epoch + 1) % self.plot_step == 0:
+
+            # Plot 6 graphs yielding information on the training progress
+            fig, ax = plt.subplots(2, 3, figsize=[10, 7])
+            clear_output(wait=True)
+            fig.suptitle(f"\n      epoch {epoch+1:05d}", fontsize=10)
+
+            # Plot 1: Wasserstein distance & GP
+            for k, v in self.losses.items():
+                if k in ["Wasserstein distance", "Gradient penalty"]:
+                    ax[0, 0].plot(np.arange(1, epoch + 2), v, label=k)
+            ax[0, 0].legend(loc=2)
+
+            # Plot 2: D's losses
+            for k, v in self.losses.items():
+                if k in ["D_loss_Pr", "D_loss_Pg"]:
+                    ax[0, 1].plot(np.arange(1, epoch + 2), v, label=k)
+            ax[0, 1].legend(loc=2)
+
+            # Plot 3: Generated PDF vs. real PDF
+            Pr = self.model.generate_data(distribution="Pr", n=1000)
+            Pg = self.model.generate_data(distribution="Pg", n=1000)
+            df = Parser.to_one_df(data=[Pr, Pg])
+            if Pr.shape[1] == 1:  # univariate distribution
+
+                sns.kdeplot(
+                    data=df,
+                    x=df.iloc[:, 0],
+                    hue="Dataset",
+                    alpha=0.6,
+                    ax=ax[0, 2],
+                    shade=True,
+                )
+
+            if Pr.shape[1] == 2:  # bivariate distribution
+                sns.scatterplot(
+                    data=df,
+                    x=df.iloc[:, 0],
+                    y=df.iloc[:, 1],
+                    hue="Dataset",
+                    style="Dataset",
+                    alpha=0.6,
+                    ax=ax[0, 2],
+                )
+
+            if Pr.shape[1] > 2:  # TODO: map to latent space
+                for i in range(df.shape[1] - 1):
+
+                    sns.kdeplot(
+                        data=df,
+                        x=df.iloc[:, i],
+                        hue="Dataset",
+                        alpha=0.6,
+                        ax=ax[0, 2],
+                        shade=True,
+                    )
+            ax[0, 2].legend(loc=2)
+
+            # Plot 4: Generated CDF vs. real CDF
+            if Pr.shape[1] == 1:  # Univariate distribution
+
+                sns.ecdfplot(
+                    data=df,
+                    x=df.iloc[:, 0],
+                    hue="Dataset",
+                    ax=ax[1, 2],
+                )
+
+            if Pr.shape[1] > 1:  # multivariate distribution
+
+                for i in range(df.shape[1] - 1):
+                    sns.ecdfplot(
+                        data=df,
+                        x=df.iloc[:, i],
+                        hue="Dataset",
+                        ax=ax[1, 2],
+                    )
+            ax[1, 2].legend(["Pr", "Pg"], loc=2)
+
+            # Plot 5: mapping f: Z -> X vs. G: Z -> X
+            if self.model.Pz_distribution.lower() in ["gaussian", "normal"]:
+                latent_grid = np.linspace(
+                    -3, 3, 100 * self.model.dim_latent_space
+                ).reshape(-1, self.model.dim_latent_space)
+            elif self.model.Pz_distribution.lower() in ["uniform", "rand"]:
+                latent_grid = np.linspace(
+                    -1, 1, 100 * self.model.dim_latent_space
+                ).reshape(-1, self.model.dim_latent_space)
+
+            y_pred = self.model.G.predict(latent_grid)
+            # TODO: multidimension representation for both input/output
+            ax[1, 0].plot(latent_grid[:, 0], y_pred[:, 0], label="Generator mapping")
+            if self.theoretical_mapping is not None:
+                y_true = self.theoretical_mapping(latent_grid[:, 0])
+                ax[1, 0].plot(latent_grid[:, 0], y_true, label="Theoretical mapping")
+            ax[1, 0].legend(
+                loc=2,
+            )
+            ax[1, 0].set_xlabel("CDF")
+
+            # Plot 6: Ds behavior for a specific dimension
+            xmins = np.min(self.model.Pr).to_numpy()
+            xmaxs = np.max(self.model.Pr).to_numpy()
+            sample_space_grid = np.zeros(shape=(1000, self.model.Pr.shape[1]))
+            for i in range(self.model.Pr.shape[1]):
+                sample_space_grid[:, i] = np.linspace(xmins[i], xmaxs[i], 1000)
+
+            D_pred_Pr = tfk.activations.sigmoid(self.model.D(sample_space_grid)).numpy()
+            ax[1, 1].plot(sample_space_grid, D_pred_Pr, color="k")
+            for i in range(sample_space_grid.shape[1]):
+                ax[1, 1].fill_between(
+                    sample_space_grid[:, i].reshape(-1),
+                    D_pred_Pr.reshape(-1),
+                    alpha=0.6,
+                    color="k",
+                )
+            ax[1, 1].set_xlabel("sample space")
+            ax[1, 1].set_ylabel(r"$P_{D}(x = P_r)$")
+
+            plt.tight_layout()
+            plt.show()

@@ -3,7 +3,7 @@
 
 ## Main libs
 # ------------------
-from typing import Callable
+from typing import Callable, Dict
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -31,8 +31,8 @@ class GANBase:
     ):
         logger.debug("Initialize GANBase class")
         # Discriminator, Generator
-        self.D = None
-        self.G = None
+        self.D: tfk.Model = None
+        self.G: tfk.Model = None
         # Distributions
         self.Pr = Pr
         self.Pg = None
@@ -40,7 +40,7 @@ class GANBase:
         # Metaschema of dataset
         self.feature_names = Pr.columns
         self.n, self.v = Pr.shape
-    
+
     def add_discriminator(self, D: tfk.Model) -> None:
 
         self.D = D
@@ -48,7 +48,6 @@ class GANBase:
     def add_generator(self, G: tfk.Model) -> None:
 
         self.G = G
-
 
     def init_discriminator(
         self,
@@ -65,7 +64,16 @@ class GANBase:
             units=self.v * 2, activation=tfk.layers.LeakyReLU(), name="hidden_layer_1"
         )(dag_input)
         dag = tfk.layers.Dense(
-            units=self.v, activation=tfk.layers.LeakyReLU(), name="hidden_layer_2"
+            units=self.v * 4, activation=tfk.layers.LeakyReLU(), name="hidden_layer_2"
+        )(dag)
+        dag = tfk.layers.Dense(
+            units=self.v * 8, activation=tfk.layers.LeakyReLU(), name="hidden_layer_3"
+        )(dag)
+        dag = tfk.layers.Dense(
+            units=self.v * 4, activation=tfk.layers.LeakyReLU(), name="hidden_layer_4"
+        )(dag)
+        dag = tfk.layers.Dense(
+            units=self.v, activation=tfk.layers.LeakyReLU(), name="hidden_layer_5"
         )(dag)
         # Output layer
         dag_output = tfk.layers.Dense(
@@ -94,6 +102,18 @@ class GANBase:
             name="hidden_layer_1",
         )(dag)
         dag = tfk.layers.BatchNormalization()(dag_input)
+        dag = tfk.layers.Dense(
+            units=self.dim_latent_space * 4,
+            activation=tfk.layers.LeakyReLU(),
+            name="hidden_layer_2",
+        )(dag)
+        dag = tfk.layers.BatchNormalization()(dag_input)
+        dag = tfk.layers.Dense(
+            units=self.dim_latent_space * 2,
+            activation=tfk.layers.LeakyReLU(),
+            name="hidden_layer_3",
+        )(dag)
+        dag = tfk.layers.BatchNormalization()(dag_input)
 
         # Output layer
         dag_output = tfk.layers.Dense(
@@ -113,7 +133,7 @@ class GANBase:
         if distribution == "Pg":
             if self.G is None:
                 self.init_generator()
-            if self.__Pz_distribution is None:
+            if self.Pz_distribution is None:
                 self.init_latent_space(distribution="Gaussian")
             Pz = self.draw_Pz(n=n)
             if to_numpy and self.G is not None:
@@ -144,16 +164,16 @@ class GANBase:
 
     def init_latent_space(self, distribution: str = "Gaussian"):
 
-        self.__Pz_distribution = distribution
+        self.Pz_distribution = distribution
 
     def draw_Pz(self, n: int):
 
         # Gaussian
-        if self.__Pz_distribution.lower() in ["gaussian", "normal"]:
+        if self.Pz_distribution.lower() in ["gaussian", "normal"]:
             Pz = np.random.normal(loc=0, scale=1, size=(n, self.dim_latent_space))
         # Uniform
-        elif self.__Pz_distribution.lower() in ["uniform", "rand"]:
-            Pz = np.random.random(size=(n, self.dim_latent_space))
+        elif self.Pz_distribution.lower() in ["uniform", "rand"]:
+            Pz = np.random.uniform(low=-1, high=1, size=(n, self.dim_latent_space))
 
         #  if as_df: #redundant?
         #     Pz = pd.DataFrame(
@@ -164,3 +184,20 @@ class GANBase:
         #     )
 
         return Pz
+
+
+class GANmonitoring(tfk.callbacks.Callback):
+    def __init__(self, theoretical_mapping: Callable = None, plot_step=100):
+        super().__init__()
+        self.theoretical_mapping = theoretical_mapping
+        self.plot_step = plot_step
+
+    def on_train_begin(self, logs: Dict = None):
+        pass
+
+    def on_epoch_end(
+        self,
+        epoch,
+        logs: Dict = None,
+    ):
+        pass
