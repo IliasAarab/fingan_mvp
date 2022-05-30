@@ -14,22 +14,47 @@ from .parser import Parser
 #data = Union[pd.DataFrame, np.ndarray, Tuple[np.ndarray, np.ndarray], Tuple[pd.DataFrame, pd.DataFrame]]
 data = Union[pd.DataFrame, np.ndarray]
 
-def preprocessing_pipeline(data: data) -> data:
+class Preprocesser:
+
+    def __init__(self) -> None:
+        pass
+
+    
+    def format_data(self, data: data, pre: bool = True) -> Union[None, data]:
+
+        if pre:
+
+            if isinstance(data, pd.DataFrame):
+                self.df = True
+                self.idx = data.index
+                self.cols = data.columns
+                data = data.to_numpy()
+            else:
+                self.df = False
+
+            return data
+        
+        else: 
+
+            if self.df:
+                data = pd.DataFrame(data, index = self.idx, columns= self.cols)
+            return data
+
+    def preprocessing_pipeline(self, data: data) -> data:
+        
+        data = self.format_data(data)
+
+        self.scaler = pp.StandardScaler().fit(data)
+        data_scaled = self.scaler.transform(data)
+        
+        data = self.format_data(data_scaled, pre= False)
+        return data
+
     
 
-    if isinstance(data, pd.DataFrame):
-        df = True
-        idx = data.index
-        cols = data.columns
-        data = data.to_numpy()
-    else:
-        df = False
+    def postprocessing_pipeline(self, data: data) -> data:
 
-    scaler = pp.StandardScaler().fit(data)
-    data_scaled = scaler.transform(data)
-    
-    if df:
-        data_scaled = pd.DataFrame(data_scaled, index = idx, columns= cols)
-    return data_scaled
-
+            data = self.format_data(data)
+            data = self.scaler.inverse_transform(data)
+            return self.format_data(data, pre=False)
     
