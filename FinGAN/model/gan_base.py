@@ -1,9 +1,8 @@
-"""Discriminator for a Generative Adversarial Network"""
+"""Baseclass to construct Generative Adversarial Networks (GANs)"""
 
 
-## Main libs
-# ------------------
-from typing import Callable, Dict
+# Main libs
+from typing import Callable, Dict, Union
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -16,19 +15,13 @@ log_config = LoggerConfiguration()
 log_config.set_logger(log_level="DEBUG", handler="STREAM")
 logger = log_config.logger
 
-# What is the problem? two problems actually:
-# 1. we need to be able to make flexible Gs and Ds
-# 2. we need to be able to have a generic set of methods and attributes
-
-# 1. We can make a function that adapts a subclassed layer, but this would still be within a base class
-
 
 class GANBase:
     def __init__(
         self,
         Pr: pd.DataFrame,
         dim_latent_space: int = 128,
-    ):
+    ) -> None:
         logger.debug("Initialize GANBase class")
         # Discriminator, Generator
         self.D: tfk.Model = None
@@ -54,8 +47,7 @@ class GANBase:
         output_activation: Callable = tfk.activations.linear,
     ) -> tfk.Model:
 
-        # MVP with hardcoded components
-        # using TFs functional API to create a Directed Acylic Graph (DAG)
+        # TFs functional API to create a Directed Acylic Graph (DAG)
 
         # Inputlayer
         dag_input = tfk.Input(shape=(self.v,), name="input_layer")
@@ -89,7 +81,7 @@ class GANBase:
         self,
         output_activation: Callable = tfk.activations.tanh,
     ) -> tfk.Model:
-        """MVP with hardcoded components: using TFs functional API to create a Directed Acylic Graph (DAG)"""
+        """TFs functional API to create a Directed Acylic Graph (DAG)"""
 
         # Inputlayer
         dag_input = tfk.Input(shape=(self.dim_latent_space,), name="input_layer")
@@ -102,12 +94,14 @@ class GANBase:
             name="hidden_layer_1",
         )(dag)
         dag = tfk.layers.BatchNormalization()(dag_input)
+        
         dag = tfk.layers.Dense(
             units=self.dim_latent_space * 4,
             activation=tfk.layers.LeakyReLU(),
             name="hidden_layer_2",
         )(dag)
         dag = tfk.layers.BatchNormalization()(dag_input)
+        
         dag = tfk.layers.Dense(
             units=self.dim_latent_space * 2,
             activation=tfk.layers.LeakyReLU(),
@@ -124,43 +118,38 @@ class GANBase:
         self.G = tfk.Model(inputs=dag_input, outputs=dag_output, name="Generator")
 
     def generate_data(
-        self, distribution: str, n: int = 100, as_df: bool = True, to_numpy: bool = True
-    ) -> None:
+        self, distribution: str, n: int = 100, output_type: Union[pd.DataFrame, np.ndarray, tf.Tensor] = pd.DataFrame
+    )-> Union[pd.DataFrame, np.ndarray, tf.Tensor]:
 
-        # Either Pr or Pg
-
-        # for Pg
-        if distribution == "Pg":
-            if self.G is None:
-                self.init_generator()
-            if self.Pz_distribution is None:
-                self.init_latent_space(distribution="Gaussian")
-            Pz = self.draw_Pz(n=n)
-            if to_numpy and self.G is not None:
-                data = self.G(Pz).numpy()
-            elif self.G is not None:
+        # Generate requested data
+        if distribution == 'Pr': 
+            data = self.Pr.sample(n= n,)
+        elif distribution == 'Pg':
+            try:
+                Pz = self.draw_Pz(n=n)
                 data = self.G(Pz)
-            y = np.zeros((n, 1))
+            except AttributeError as e:
+                return "Generator is missing or ill-defined!"
+        elif distribution == 'Pz':
+            data = self.draw_Pz(n=n)
 
-        # for Pr
-        elif distribution == "Pr":
-            # Sample randomly from Pr dataset
-            idx = np.random.randint(low=0, high=len(self.Pr), size=n)
-            if isinstance(self.Pr, pd.DataFrame):
-                data = self.Pr.loc[idx, :].copy()
-            else:
-                data = self.Pr[idx, :]
-            y = np.ones((n, 1))
-
-        # Convert to dataframe
-        if as_df and not isinstance(data, pd.DataFrame):
-            cols = self.feature_names
-            data = pd.DataFrame(
-                data,
-                columns=cols,
-            )
-
+        # Format appropriately
+        if distribution == 'Pr' and output_type == np.ndarray:
+            data = data.to_numpy()
+        if distribution == 'Pr' and output_type == tf.Tensor:
+            data = tf.convert_to_tensor(data)
+        if distribution == 'Pg' and output_type == pd.DataFrame:
+            data = pd.DataFrame(data= data.numpy(), columns= self.feature_names)
+        if distribution == 'Pg' and output_type == np.ndarray:
+            data = data.numpy()
+        if distribution == 'Pz' and output_type == tf.Tensor:
+            data = tf.convert_to_tensor(data)
+        if distribution == 'Pz' and output_type == pd.DataFrame:
+            cols = columns=[f"latent_dim_{i}" for i in range(1, self.dim_latent_space + 1) ]
+            data = pd.DataFrame(data= data, columns= cols)
+        
         return data
+
 
     def init_latent_space(self, distribution: str = "Gaussian"):
 
@@ -168,20 +157,10 @@ class GANBase:
 
     def draw_Pz(self, n: int):
 
-        # Gaussian
         if self.Pz_distribution.lower() in ["gaussian", "normal"]:
             Pz = np.random.normal(loc=0, scale=1, size=(n, self.dim_latent_space))
-        # Uniform
         elif self.Pz_distribution.lower() in ["uniform", "rand"]:
             Pz = np.random.uniform(low=-1, high=1, size=(n, self.dim_latent_space))
-
-        #  if as_df: #redundant?
-        #     Pz = pd.DataFrame(
-        #         Pz,
-        #         columns=[
-        #             f"latent_dim_{i}" for i in range(1, self.dim_latent_space + 1)
-        #         ],
-        #     )
 
         return Pz
 
